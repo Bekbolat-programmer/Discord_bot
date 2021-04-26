@@ -38,34 +38,46 @@ def parse_city_json(json_file='russia.json'):
 def get_city(city):
     normilize_city = city.strip().lower()[1:]
     if is_correct_city_name(normilize_city):
-        if get_city.previous_city != "" and normilize_city[0] != get_city.previous_city[-1]:
-            return 'Город должен начинаться на "{0}" 🥴'.format(get_city.previous_city[-1])
+        if is_correct_city(normilize_city):
+            if get_city.previous_city != "" and normilize_city[0] != get_city.previous_city[-1]:
+                return 'Город должен начинаться на "{0}" 🥴'.format(get_city.previous_city[-1])
 
-        if normilize_city not in cities_already_named:
-            cities_already_named.append(normilize_city)
-            last_latter_city = normilize_city[-1]
-            proposed_names = list(filter(lambda x: x[0] == last_latter_city, cities))
-            if proposed_names:
-                for city in proposed_names:
-                    if city not in cities_already_named:
-                        cities_already_named.append(city)
-                        get_city.previous_city = city
-                        return city.capitalize()
-            return 'Я не знаю города на эту букву😔. Ты выиграл🥳'
+            if normilize_city not in cities_already_named:
+                cities_already_named.append(normilize_city)
+                last_latter_city = normilize_city[-1]
+                proposed_names = list(filter(lambda x: x[0] == last_latter_city, cities))
+                if proposed_names:
+                    for city in proposed_names:
+                        if city not in cities_already_named:
+                            cities_already_named.append(city)
+                            get_city.previous_city = city
+                            return city.capitalize()
+                return 'Я не знаю города на эту букву😔. Ты выиграл🥳'
+            else:
+                return 'Город уже был🥴. Повторите попытку'
         else:
-            return 'Город уже был🥴. Повторите попытку'
+            return 'Прости я не знаю такого города😓 Убедись, что город написан правильно и является городом России'
     else:
         return 'Некорректное название города🥴. Повторите попытку'
 
 
 get_city.previous_city = ""
-cities = parse_city_json()[:1500]
+cities = parse_city_json()[:3500]
 cities_already_named = []
 gamestart = [0]
 
 
 def is_correct_city_name(city):
     return city[-1].isalpha() and city[-1] not in ('ь', 'ъ')
+
+
+def is_correct_city(city):
+    a = False
+    for i in cities:
+        if city.lower() == i.lower():
+            a = True
+            break
+    return a
 # Тут изменения заканчиваются
 
 
@@ -99,14 +111,15 @@ class Multi_Bot(commands.Cog):
         await ctx.send('Я очень люблю игры! Одной из моих любимых является Doom, но к сожалению я всего лишь бот'
                        ' и не могу в неё играть. Но мы можем скоротать время в города. Правила очень простые, думаю'
                        ' ты их знаешь. Только я расскажу про пару условностей. Все города которые ты мне отправляешь'
-                       ' должны начинаться с восклицательного знака. Нельзя дважды называть один и тот же город. Если'
+                       ' должны начинаться с восклицательного знака и являться городами России матушки. '
+                       'Нельзя дважды называть один и тот же город. Если'
                        ' ты захочешь начать с начала, то введи команду -restart, а если захочешь прекратить играть'
                        ' введи команду -stop_city')
         await ctx.send('Начинаем игру, ты первый')
 
     @commands.command(name='restart')
     async def restart(self, ctx, *arg):
-        cities = parse_city_json()[:1500]
+        cities = parse_city_json()[:3500]
         cities_already_named.clear()
         get_city.previous_city = ""
         await ctx.send('Начинаем играть заново, ты первый')
@@ -115,11 +128,10 @@ class Multi_Bot(commands.Cog):
     async def stop_city(self, ctx, *arg):
         gamestart.append(0)
         del gamestart[0]
-        cities = parse_city_json()[:1500]
+        cities = parse_city_json()[:3500]
         cities_already_named.clear()
         get_city.previous_city = ""
         await ctx.send('Игра закончилась, было весело🤪')
-
     @commands.command(aliases=["g"])
     async def game(self, ctx, *args):
         print(len(args), args)
