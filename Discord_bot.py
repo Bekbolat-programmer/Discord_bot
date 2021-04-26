@@ -8,37 +8,172 @@ import sqlite3
 from translate import Translator
 import datetime
 import os
+import conf
+import discord
+import json
 
 
-
+start = 0
+intents = discord.Intents.all()
 dashes = ['\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685']
-TOKEN = "ODMxOTEzMDA5ODY1MTYyNzUy.YHcJXQ.ij7L_yhL6Cc8pztzWMlTHK46PWk"
+TOKEN = "ODMxOTEzMDA5ODY1MTYyNzUy.YHcJXQ.p-iOhuLq2wwj5OOYte_r_GykpMY"
 ban_words = ["политика", "мачу-пикчу", "чихуа-хуа"]
 support = ["Поздравляем", "Молодец", "Ююююхууууу"]
+hello = ['Приветсвую', 'Давно не виделись', 'Специальное электронное приветсвие для', 'Hello']
+
+
+def parse_city_json(json_file='russia.json'):
+    p_obj = None
+    try:
+        js_obj = open(json_file, "r", encoding="utf-8")
+        p_obj = json.load(js_obj)
+    except Exception as err:
+        print(err)
+        return None
+    finally:
+        js_obj.close()
+    return [city['city'].lower() for city in p_obj]
+
+
+def get_city(city):
+    normilize_city = city.strip().lower()[1:]
+    if is_correct_city_name(normilize_city):
+        if is_correct_city(normilize_city):
+            if get_city.previous_city != "" and normilize_city[0] != get_city.previous_city[-1]:
+                return 'Город должен начинаться на "{0}" 🥴'.format(get_city.previous_city[-1])
+
+            if normilize_city not in cities_already_named:
+                cities_already_named.append(normilize_city)
+                last_latter_city = normilize_city[-1]
+                proposed_names = list(filter(lambda x: x[0] == last_latter_city, cities))
+                if proposed_names:
+                    for city in proposed_names:
+                        if city not in cities_already_named:
+                            cities_already_named.append(city)
+                            get_city.previous_city = city
+                            return city.capitalize()
+                return 'Я не знаю города на эту букву😔. Ты выиграл🥳'
+            else:
+                return 'Город уже был🥴. Повторите попытку'
+        else:
+            return 'Прости я не знаю такого города😓 Убедись, что город написан правильно и является городом России'
+    else:
+        return 'Некорректное название города🥴. Повторите попытку'
+
+
+get_city.previous_city = ""
+cities = parse_city_json()[:3500]
+cities_already_named = []
+gamestart = [0]
+
+
+def is_correct_city_name(city):
+    return city[-1].isalpha() and city[-1] not in ('ь', 'ъ')
+
+
+def is_correct_city(city):
+    a = False
+    for i in cities:
+        if city.lower() == i.lower():
+            a = True
+            break
+    return a
+# Тут изменения заканчиваются
+
 
 class Multi_Bot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+# Тут изменения начинаются
     @commands.Cog.listener()
     async def on_message(self, message):
         for i in ban_words:
             if i in message.content.lower():
                 await message.delete()
+                await message.channel.send(f'{str(message.author)} ваше сообщение было удаленно '
+                                           f'из-за нарушений правил чата🤬\nСтарайтесь больше'
+                                           f' не нарушать правила чата🤐')
         if "ура" in message.content.lower():
             await message.channel.send(random.choice(support))
+        if 'привет' in message.content.lower():
+            if message.author != bot.user:
+                await message.channel.send(f'{random.choice(hello)} {str(message.author)}')
+        if gamestart[0] == 1:
+            if message.content.startswith('!'):
+                response = get_city(message.content)
+                await message.channel.send(response)
 
-    @commands.command(name='help1', aliases=["h"])
-    async def help1(self, ctx, *arg):
-        await ctx.send(str(ctx.message.author) + "\u2680")
+    @commands.command(name='game_city')
+    async def game_city(self, ctx, *arg):
+        gamestart.append(1)
+        del gamestart[0]
+        await ctx.send('Я очень люблю игры! Одной из моих любимых является Doom, но к сожалению я всего лишь бот'
+                       ' и не могу в неё играть. Но мы можем скоротать время в города. Правила очень простые, думаю'
+                       ' ты их знаешь. Только я расскажу про пару условностей. Все города которые ты мне отправляешь'
+                       ' должны начинаться с восклицательного знака и являться городами России матушки. '
+                       'Нельзя дважды называть один и тот же город. Если'
+                       ' ты захочешь начать с начала, то введи команду -restart, а если захочешь прекратить играть'
+                       ' введи команду -stop_city')
+        await ctx.send('Начинаем игру, ты первый')
+
+    @commands.command(name='restart')
+    async def restart(self, ctx, *arg):
+        cities = parse_city_json()[:3500]
+        cities_already_named.clear()
+        get_city.previous_city = ""
+        await ctx.send('Начинаем играть заново, ты первый')
+
+    @commands.command(name='stop_city')
+    async def stop_city(self, ctx, *arg):
+        gamestart.append(0)
+        del gamestart[0]
+        cities = parse_city_json()[:3500]
+        cities_already_named.clear()
+        get_city.previous_city = ""
+        await ctx.send('Игра закончилась, было весело🤪')
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        print(payload.message_id)
+        if payload.message_id == conf.POST_ID:
+            channel = self.bot.get_channel(payload.channel_id)
+            message = await channel.fetch_message(payload.message_id)
+            print(message)
+            member = discord.utils.get(message.guild.members, id=payload.user_id)
+
+            try:
+                emoji = str(payload.emoji)
+                role = discord.utils.get(message.guild.roles, id=conf.ROLES[emoji])
+
+                if len([i for i in member.roles if i.id not in conf.EXCROLES]) <= conf.MAX_ROLES_PER_USER:
+                    await member.add_roles(role)
+                    print('[SUCCESS] User {0.display_name} has been granted with role {1.name}'.format(member, role))
+                else:
+                    await message.remove_reaction(payload.emoji, member)
+                    print('[ERROR] Too many roles for user {0.display_name}'.format(member))
+
+            except KeyError as e:
+                print('[ERROR] KeyError, no role found for ' + emoji)
+            except Exception as e:
+                print(repr(e))
 
     @commands.command(name='roll_dice')
     async def roll_dice(self, ctx, count, *arg):
         if len(arg) != 0:
             await ctx.send("Лишний аргумент")
         else:
-            res = [random.choice(dashes) for _ in range(int(count))]
-            await ctx.send(" ".join(res))
+            try:
+                result = []
+                summ = 0
+                for _ in range(int(count)):
+                    res = random.randint(0, 5)
+                    result.append(dashes[res])
+                    summ = summ + res + 1
+                await ctx.send(" ".join(result))
+                await ctx.send(f"Всего: ❗__{summ}__❗")
+            except:
+                await ctx.send("Вы написаали не число")
 
     @commands.command(name='cat')
     async def cat(self, ctx, *arg):
@@ -58,9 +193,11 @@ class Multi_Bot(commands.Cog):
             data = response.json()
             await ctx.send(data['message'])
 
-
     @commands.command(aliases=['p'])
     async def play(self, ctx, url: str):
+        await ctx.send("Searching :mag_right: ")
+        await ctx.send("Wait a minute")
+        await ctx.send(" 🗣:notes:")
         song_there = os.path.isfile("song.mp3")
         try:
             if song_there:
@@ -222,7 +359,7 @@ class Multi_Bot(commands.Cog):
                 while True:
                     if int(datetime.datetime.now().strftime("%H")) == int(hours)\
                             and int(datetime.datetime.now().strftime("%M")) == int(minutes):
-                        await ctx.send(f'⏰ Time X has come!')
+                        await ctx.send(f'⏰ Time X has come❗')
                         break
 
             else:
@@ -238,7 +375,7 @@ class Multi_Bot(commands.Cog):
                             hours, minutes, flag = 0, 0, False
                             time = None
                             break
-                    await ctx.send(f'⏰ Time X has come!')
+                    await ctx.send(f'⏰ Time X has come❗')
         except:
             await ctx.send(f'Команды была введена неправильно 😞')
             await ctx.send(f'Воспользуйтесь командой `-help_game`, чтобы сверить запрос')
@@ -345,7 +482,95 @@ class Multi_Bot(commands.Cog):
                     await ctx.send(games[game][i])
             cur.close()
 
+    @commands.command()
+    async def he1p(self, ctx, *arg):
+        if len(arg) == 0:
+            help = open('data/txts/help.txt', 'r', encoding='utf8')
+            lines = help.readlines()
+            text = ""
+            for i in lines:
+                text = text + i
+            await ctx.send(text)
+            help.close()
+        elif "game" in arg:
+            text = ""
+            help = open('data/txts/help game.txt', 'r', encoding='utf8')
+            lines = help.readlines()
+            for i in lines:
+                text = text + i
+            await ctx.send(text)
+            help.close()
+        elif "all" in arg:
+            text = ""
+            help = open('data/txts/help all.txt', 'r', encoding='utf8')
+            lines = help.readlines()
+            for i in lines:
+                text = text + i
+            await ctx.send(text)
+            help.close()
+        elif "us" in arg:
+            text = ""
+            help = open('data/txts/help us.txt', 'r', encoding='utf8')
+            lines = help.readlines()
+            for i in lines:
+                text = text + i
+            await ctx.send(text)
+            help.close()
+        elif "hobby" in arg:
+            text = ""
+            help = open('data/txts/help hobby.txt', 'r', encoding='utf8')
+            lines = help.readlines()
+            for i in lines:
+                text = text + i
+            await ctx.send(text)
+            help.close()
 
-bot = commands.Bot(command_prefix='-')
+    @commands.command(aliases=["b"])
+    async def book(self, ctx, *args):
+        print(len(args), args)
+        if len(args) != 0:
+            genre = " ".join(args).lower()
+            con = sqlite3.connect("data/tabels/books.db")
+            cur = con.cursor()
+            result = cur.execute(f"SELECT id FROM genres WHERE genre LIKE '%{genre}%'").fetchall()
+            if len(result) != 0:
+                books = cur.execute(f"SELECT * FROM books WHERE genre_id = {result[0][0]}").fetchall()
+                book = random.randint(0, len(books))
+                for i in range(1, len(books[book])):
+                    if i == 2:
+                        pass
+                    else:
+                        await ctx.send(books[book][i])
+                cur.close()
+            else:
+                books = cur.execute(f"SELECT * FROM books").fetchall()
+                book = random.randint(0, len(books))
+                await ctx.send("Извините у нас нет книги в таком жанре 😞")
+                await ctx.send("❗_Но мы можем предложить:_❗")
+                for i in range(1, len(books[book])):
+                    if i == 1:
+                        await ctx.send(f'`{books[book][i]}`')
+                    elif i == 2:
+                        pass
+                    else:
+                        await ctx.send(books[book][i])
+                cur.close()
+        else:
+            con = sqlite3.connect("data/tabels/books.db")
+            cur = con.cursor()
+            books = cur.execute(f"SELECT * FROM books").fetchall()
+            book = random.randint(0, len(books))
+            await ctx.send("❗_Вот что мы можем предложить_❗(надеемся вы хорошо проведете время):")
+            for i in range(1, len(books[book])):
+                if i == 1:
+                    await ctx.send(f'`{books[book][i]}`')
+                elif i == 2:
+                    pass
+                else:
+                    await ctx.send(books[book][i])
+            cur.close()
+
+
+bot = commands.Bot(command_prefix='-', intents=intents)
 bot.add_cog(Multi_Bot(bot))
 bot.run(TOKEN)
